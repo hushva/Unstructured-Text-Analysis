@@ -1,0 +1,529 @@
+---
+title: "Unstructured text analysis on the Dark Knight trilogy"
+author: "Karola Takács"
+date: "20/05/2021"
+output:
+  prettydoc::html_pretty:
+    theme: leonids
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, error = FALSE, message = FALSE, warning = FALSE)
+
+# loading packages
+library(textreadr)
+library(tidytext)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(ggplot2)
+library(tidyverse)
+library(scales)
+library(prettydoc)
+```
+
+In this assignment my main aim is to investigate how the Dark Knight trilogy episodes' sentiment vary and my hypothesis is that the newer the episode the more negative it gets to attract the viewers and to excel the previous one.
+
+
+### Import and transform text files
+
+Reading in the first txt file, which is the subtitle for Batban Begins.
+
+```{r batman begins}
+
+text <- read_tsv("begins_eng.txt", col_names = TRUE, trim_ws = TRUE, skip_empty_rows = TRUE)
+
+# get rid of numbers and non-letters
+text <- 
+  text %>% filter(str_detect(text, "[a-z]|[A-Z]")) 
+
+n = nrow(text)
+vec  <- as.vector(text$text)
+
+# put the text into dataframe
+begins_df <- tibble(line = 1:n, text = vec)
+
+# apply unnest function to have a one word per line format
+begins_tidy <- begins_df %>%
+  unnest_tokens(word, text)
+
+# get rid of stop word, common words
+begins_tidy <- begins_tidy %>%
+  anti_join(stop_words, by = "word")
+```
+
+I might need to remove some words that are not important or are not consistent with their sentiment
+To check this, I am joining my tidy data with the Bing lexicon to check sentiments, especially since later I am going to use the Bing dictionary for the word clouds as well.
+
+```{r}
+bing_word_count_a <- begins_tidy %>% 
+   inner_join(get_sentiments("bing")) %>% 
+   count(word, sentiment, sort=TRUE) %>% 
+   ungroup() %>% 
+   head(15)
+
+bing_word_count_a
+```
+
+Master is a positive word and in this case it signals some subordinate relationship, but in this case it is more of the sign of respect and indication of service to someone. 
+Some combinations are misleading, e.g. master bedroom which is neither positive nor negative.
+At this point I decided not to remove Chill and Crane since they are characters, but later I need to since those words have negative sentiment.
+
+```{r}
+# my own list to exclude words
+words_to_ignore_begins <- data_frame(word = c("sir", "master"))
+
+begins_tidy <- begins_tidy %>%
+   anti_join(words_to_ignore_begins, by = "word")
+
+begins_tidy %>%
+  count(word, sort = TRUE) %>%  head(10)
+```
+
+There seems to be very few unique words in the dialogues, now that I removed stopwords.
+Taking a look at the most frequent words in the first episode:
+Not surprisingly 'bruce wayne' is much ahead, but 'people' and 'gotham' appear a lot of times in the text, so it is important where the plot happens.
+
+```{r word frequency begins, echo=FALSE, fig.align='center'}
+ begins_tidy %>% 
+   count(word, sort = TRUE) %>%
+   filter(n > 15) %>%
+   mutate(word = reorder(word, n)) %>%
+   ggplot(aes(word, n)) + geom_col() + xlab(NULL) + coord_flip()
+```
+
+Reading in the second txt file, which is the subtitle for The Dark Knight.
+```{r the dark knight}
+
+# same steps
+text <- read_tsv("dark_knight_eng.txt", col_names = TRUE, trim_ws = TRUE, skip_empty_rows = TRUE)
+ 
+text <- 
+    text %>% filter(str_detect(text, "[a-z]|[A-Z]")) 
+ 
+n = nrow(text)
+vec  <- as.vector(text$text)
+ 
+dk_df <- tibble(line = 1:n, text = vec)
+ 
+dk_tidy <- dk_df %>%
+    unnest_tokens(word, text)
+
+dk_tidy <- dk_tidy %>%
+    anti_join(stop_words, by = "word") 
+   
+# remove rows with remaining numbers - for some reason I could not fix this issue, so I applied this simple filter to get rid of the numbers
+dk_tidy = filter(dk_tidy, line != "2174")
+
+# again check with bing:
+bing_word_count_b <- dk_tidy %>% 
+   inner_join(get_sentiments("bing")) %>% 
+   count(word, sentiment, sort=TRUE) %>% 
+   ungroup() %>% 
+   head(15)
+
+bing_word_count_b
+```
+
+Dent also means 'punch' or 'beat' but it is the name of a character - Harvey Dent - who turns into bad in the movie.
+Also, despite being the secondary antagonist, he became the final antagonist of the film after Joker's defeat. In this case the name is indicative of the character, but should be removed from the word list. Here I am leaving it in, since this also signals that the story is very character-based.
+I was also wondering why joker is negative: I think it can also have a positive angle: it can be considered as the most valuable card in some card games and in that case Joker refers to a funny figure. Not sure what the Bing lexicon creators thought of Joker. :)
+
+```{r}
+# Remove words 'Wanna' and 'yeah' as these rather look like filling words, and slang grammar 
+words_to_ignore_dk <- data_frame(word = c("sir", "master","wanna", "yeah", "gonna"))
+
+dk_tidy <- dk_tidy %>%
+   anti_join(words_to_ignore_dk, by = "word")
+ 
+dk_tidy %>%
+    count(word, sort = TRUE) %>%  head(10)
+```
+
+Harvey Dent takes over in the second episode along 'batman', while 'wayne' got even behind Joker. Not much verbs here, the first one appearing is 'kill'.
+
+```{r word frequency dk,echo=FALSE, fig.align='center'}
+# visualize most common words in the second episode
+ 
+dk_tidy %>% 
+    count(word, sort = TRUE) %>%
+    filter(n > 16) %>%
+    mutate(word = reorder(word, n)) %>%
+    ggplot(aes(word, n)) + geom_col() + xlab(NULL) + coord_flip()
+
+```
+
+Reading in the third txt file, which is the subtitle for The Dark Knight Rises
+
+```{r dark knight rises}
+
+# same steps
+text <- read_tsv("dk_rises_eng.txt", col_names = TRUE, trim_ws = TRUE, skip_empty_rows = TRUE)
+ 
+text <- 
+    text %>% filter(str_detect(text, "[a-z]|[A-Z]")) 
+ 
+n = nrow(text)
+vec  <- as.vector(text$text)
+ 
+dk_rises_df <- tibble(line = 1:n, text = vec)
+ 
+dk_rises_tidy <- dk_rises_df %>%
+    unnest_tokens(word, text)
+ 
+dk_rises_tidy <- dk_rises_tidy %>%
+    anti_join(stop_words, by = "word")
+
+# Check with bing
+bing_word_count_c <- dk_rises_tidy %>% 
+   inner_join(get_sentiments("bing")) %>% 
+   count(word, sentiment, sort=TRUE) %>% 
+   ungroup() %>% 
+   head(15)
+
+bing_word_count_c
+```
+
+Again, Bane - a character - means strike, trouble and the like. It has a negative sentiment. For the frequency of the words I am leaving it in the text but later I am going to remove it (before creating the sentiment graph).
+It is interesting what names the writers choose, so the anti-hero's name reflects its personality and role.
+
+
+```{r}
+# Adding words 'uh' and 'hey' to my exception list as these are meaningless
+words_to_ignore_dk_rises <- data_frame(word = c("uh", "hey","sir", "master","wanna", "yeah", "gonna"))
+ 
+dk_rises_tidy <- dk_rises_tidy %>%
+    anti_join(words_to_ignore_dk_rises, by = "word")
+ 
+dk_rises_tidy %>%
+    count(word, sort = TRUE) %>%  head(10)
+```
+
+'Time' got a more prominent place in terms of ranking and 'wayne' is again the first in terms of frequency. Similarly: 
+storyline is about characters and the city / people.
+
+```{r, fig.align='center'}
+# visualize most common words in the third episode
+ 
+dk_rises_tidy %>% 
+    count(word, sort = TRUE) %>%
+    filter(n > 15) %>%
+    mutate(word = reorder(word, n)) %>%
+    ggplot(aes(word, n)) + geom_col() + xlab(NULL) + coord_flip()
+```
+
+
+```{r word frequency}
+
+word_frequency <- bind_rows(mutate(begins_tidy, episode = "Batman Begins (2005)"),
+                            mutate(dk_tidy, episode = "The Dark Knight (2008)"),
+                            mutate(dk_rises_tidy, episode = "The Dark Knight Rises (2012)")) %>%
+   count(episode, word) %>%
+   group_by(episode) %>% 
+   mutate(proportion = n / sum(n)) %>% 
+   select(-n) %>% 
+   spread(episode, proportion) %>% 
+   gather(episode, proportion, `The Dark Knight (2008)`:`The Dark Knight Rises (2012)`)
+
+```
+
+Visualizing the proportion of words occurring in Batman Begins to the words in The Dark Knight and to The Dark Knight Rises.
+Words close to the line have similar frequencies in both texts
+
+```{r word frequency plot,fig.align='center'}
+
+ggplot(word_frequency, aes(x = proportion, y =`Batman Begins (2005)`, color = abs(`Batman Begins (2005)` - proportion))) +
+   geom_abline(color = "gray40", lty = 2) +
+   geom_jitter(alpha = 0.1, size = 2.5, width = 0.3, height = 0.3) +
+   geom_text(aes(label = word), check_overlap = TRUE, vjust = 1.5) +
+   scale_x_log10(labels = label_number())+ 
+   scale_y_log10(labels = label_number()) +
+   scale_color_gradient(limits = c(0, 0.001), low = "darkslategray4", high = "gray75") +
+   facet_wrap(~episode, ncol = 2) +
+   theme(legend.position="none") +
+   labs(y = "Batman Begins (2005)", x = NULL)   
+
+```
+
+Based on the graphs we see that there is not much variation, it seems the texts have rather small corpus.
+'Drugs' and 'blood' and 'falcone' have higher frequency in the first episode than in the second and 'batman' is more frequent in the second episode than in the first. Rachel appears more often in the first than in the last episode (since she dies in the second episode)
+
+
+## Word clouds
+
+To depict a bit more visually what we have seen on the barcharts above. ALl in all 'people' seem to be in the center in all three episodes.
+```{r word clouds, fig.align='center'}
+
+library(wordcloud) 
+
+begins_tidy %>% 
+   anti_join(stop_words) %>% 
+   count(word) %>% 
+   with(wordcloud(word, n, max.words = 100))
+# defining words: bruce, wayne, rachel, people
+
+dk_tidy %>% 
+   anti_join(stop_words) %>% 
+   count(word) %>% 
+   with(wordcloud(word, n, max.words = 100))
+# defining words: harvey, batman, people
+
+dk_rises_tidy %>% 
+   anti_join(stop_words) %>% 
+   count(word) %>% 
+   with(wordcloud(word, n, max.words = 100))
+# defining words: wayne, bane, people, time
+
+```
+With adding the Bing lexicon to the clouds we can inspect them by positive and negative sentiment.
+The first episode is dominated by fear - fine, the second with kill - hero and the third with powerful - bomb, which could be extremely negative if that is a 'powerful bomb'. :) I will get to bigrams a bit later.
+
+```{r word cloud by sentiment, fig.align='center'}
+# Word cloud sorted by sentiments
+library(reshape2)
+library(textdata)
+
+# first I remove the family names, so they won't appear either positive or negative (mostly negative)
+
+wti <- data_frame(word = c("chill", "dent", "joker","bane"))
+
+begins_tidy <- begins_tidy %>%
+   anti_join(wti, by = "word")
+
+begins_tidy %>%
+   inner_join(get_sentiments("bing")) %>%
+   count(word, sentiment, sort = TRUE) %>%
+   acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+   comparison.cloud(colors = c("gray20", "gray80"),
+                    max.words = 70)
+
+
+# I don't want to skew the plot with Joker so I remove it. For me does not really feel that negative however for the bing lexicon's creator it has been.
+
+dk_tidy <- dk_tidy %>%
+   anti_join(wti, by = "word")
+
+
+dk_tidy %>%
+   inner_join(get_sentiments("bing")) %>%
+   count(word, sentiment, sort = TRUE) %>%
+   acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+   comparison.cloud(colors = c("gray20", "gray80"),
+                    max.words = 70)
+
+
+dk_rises_tidy <- dk_rises_tidy %>%
+   anti_join(wti, by = "word")
+
+dk_rises_tidy %>%
+   inner_join(get_sentiments("bing")) %>%
+   count(word, sentiment, sort = TRUE) %>%
+   acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+   comparison.cloud(colors = c("gray20", "gray80"),
+                    max.words = 70)
+
+```
+
+## Sentiment Analysis
+
+```{r sentiment analysis I}
+
+# introduce linenumber as a new column, like this each row will have a different linenumber, which will be the index for the word in that row
+
+begins_tidy_row <- begins_tidy %>%
+  mutate(
+      linenumber = row_number())
+
+dk_tidy_row <- dk_tidy%>%
+   mutate(
+      linenumber = row_number())
+
+dk_rises_tidy_row <- dk_rises_tidy %>%
+   mutate(
+      linenumber = row_number())
+
+# I am going to use afinn sentiment lexicon since this one will be most suitable later on
+# choose 30 as a meaningful chunk to check sentiment on, since I have small texts.
+
+afinn_begins <- begins_tidy_row %>% 
+   inner_join(get_sentiments("afinn")) %>%  
+   group_by(index = linenumber %/% 30) %>% 
+   summarize(sentiment = sum(value)) %>% 
+   mutate(episode = "Batman Begins")
+
+afinn_dk <- dk_tidy_row %>% 
+   inner_join(get_sentiments("afinn")) %>% 
+   group_by(index = linenumber %/% 30) %>% 
+   summarize(sentiment = sum(value)) %>% 
+   mutate(episode = "The Dark Knight")
+
+afinn_dk_rises <- dk_rises_tidy_row %>% 
+   inner_join(get_sentiments("afinn")) %>% 
+   group_by(index = linenumber %/% 30) %>%  # row_number()
+   summarize(sentiment = sum(value)) %>% 
+   mutate(episode = "The Dark Knight Rises")
+
+```
+
+For some reason there are somewhat less unique words and thus rows in the first episode.
+What is easy to spot now is how dominant the negative sentiment words are in the first episode and also in the third one. The second episode seems a bit more balanced with more spikes upwards. It also seems that the deepest / lowest points happen at different times in the movies with a happier ending.
+
+```{r afinn sentiment wrap,fig.height=8,fig.width=8, fig.align='center'}
+
+bind_rows(afinn_begins, afinn_dk, afinn_dk_rises) %>% 
+   ggplot(aes(index, sentiment, fill = episode)) +
+   geom_col(show.legend = FALSE) +
+   facet_wrap(~episode, ncol = 1, scales = "free_y")
+
+```
+By simply summarizing the sentiments the most negative is the the third (-411) episode followed closely by the first episode (-409) and the least negative being the second episode (-198), which is in line with the above graph.
+This is really interesting, since The Dark Knight was the number one grossing movie in 2008 and it had the highest domestic box office performance and in terms of worldwide gross box office income it got behind The Dark Knight Rises by only 80 million USD.
+On IMDB Batman Begins has a rating of 8.2, The Dark Knight has 9.0 and the Dark Knight Rises 8.4. The scoring moves similarly to the sentiment total scores for the episodes and the least negative episode got the highest rating (-411 to 8.2, -198 to 9.0, -409 to 8.4) (I know that the scoring is only representative of the registered users on IMDB).
+
+```{r sentiment scores}
+
+begins_tidy %>% 
+   inner_join(get_sentiments("afinn")) %>% 
+   summarize(sentiment = sum(value))
+
+dk_tidy %>% 
+   inner_join(get_sentiments("afinn")) %>% 
+   summarize(sentiment = sum(value))
+
+dk_rises_tidy %>% 
+   inner_join(get_sentiments("afinn")) %>% 
+   summarize(sentiment = sum(value))
+```
+
+Lets try to visualize the sentiment scores and how frequent those words appear. For this I calculated the 'contribution' of each word - based on the afinn lexicon - , which is a multiplication of a word's value and its number of occurrence in the text.
+```{r}
+
+count_afinn <- bind_rows(mutate(begins_df, episode = "Batman Begins"),
+                     mutate(dk_df, episode = "The Dark Knight"),
+                     mutate(dk_rises_df, episode = "The Dark Knight Rises")) %>% 
+   unnest_tokens(word, text) %>% 
+   filter(!is.na(word))
+
+afinn_values <- count_afinn %>% 
+   inner_join(get_sentiments("afinn")) %>% 
+   count(episode, word, value, sort = TRUE) %>% 
+   ungroup()
+
+```
+
+Surprising to see love among the positive words, and 'yeah' for some reason. The reason for this might be that the text captures rather real life conversations and it is most probably a reassuring word.On the negatives 'killed' and 'kill' could be merged and then definitely that would be the highest contributor to the negative sentiments.
+
+```{r word contribution, fig.align='center'}
+
+afinn_values %>% 
+   anti_join(stop_words, by = "word") %>% 
+   mutate(contribution = n * value) %>% 
+   arrange(desc(abs(contribution))) %>% 
+   head(20) %>% 
+   mutate(word = reorder(word, contribution)) %>% 
+   ggplot(aes(n * value, word, fill = n * value > 0)) +
+   geom_col(show.legend = FALSE) +
+   labs(x = "Sentiment value * number of occurrences",
+       y = "Words")
+
+```
+
+With a bit different pipeline and approach we arrive at the same negative, but different positive words.
+```{r, fig.align='center'}
+count_afinn %>% 
+   anti_join(stop_words, by = "word") %>% 
+   count(word,episode,sort = TRUE) %>% 
+   inner_join(get_sentiments("afinn"), by = "word") %>% 
+   group_by(word) %>% 
+   summarize(contribution = sum(n * value)) %>% 
+   top_n(12, abs(contribution)) %>% 
+   mutate(word = reorder(word, contribution)) %>% 
+   ggplot(aes(word, contribution)) +
+   geom_col() +
+   coord_flip() +
+   labs(y = "Frequency of word * Afinn score")
+   
+```
+
+I wanted to take a quick look on how the contribution looks along the episodes and whether there is any difference.
+It is again easy to spot how strongly negative the Dark Knight Rises is.
+We might be able to formulate what each episode is about based on these words. The negative words are all about dying.
+
+```{r, fig.align='center'}
+
+afinn_values %>%
+   anti_join(stop_words, by = "word") %>% 
+   mutate(contribution = n * value,
+         word = reorder(word, contribution)) %>%
+   group_by(word) %>%
+   head(25) %>%
+   slice_max(abs(contribution), n = 12, with_ties = FALSE) %>%
+   ggplot(aes(word, contribution, fill = n * value > 0)) +
+   geom_col(show.legend = FALSE) +
+   facet_wrap(~ episode, scales = "free") +
+   scale_x_discrete(labels = function(x) gsub("__.+$", "", x)) +
+   xlab("Words") +
+   ylab("Sentiment value * # of occurrences") +
+   coord_flip()
+
+```
+
+Lastly I looked at bigrams, which reflect how important the particular 2-word expression is to a document in a corpus, we might find some context for the episodes.
+
+```{r bigrams}
+
+bigrams <- bind_rows(mutate(begins_df, episode = "Batman Begins"),
+                     mutate(dk_df, episode = "The Dark Knight"),
+                     mutate(dk_rises_df, episode = "The Dark Knight Rises")) %>% 
+   unnest_tokens(bigram, text, token = "ngrams", n = 2) %>% 
+   filter(!is.na(bigram))
+   
+bigrams = filter(bigrams, line != "2174" & line != "1122")
+
+# separate the two words into two columns so we can join the stop words dictionary to each of them separately
+bigrams_separated <- bigrams %>% 
+   separate(bigram, c("word1", "word2"), sep = " ")
+
+bigrams_filtered <- bigrams_separated %>% 
+   filter(!word1 %in% stop_words$word) %>% 
+   filter(!word2 %in% stop_words$word)
+
+bigram_counts <- bigrams_filtered %>% 
+   count(episode, word1, word2, sort = TRUE)
+
+bigram_counts %>% head(12)
+
+```
+
+```{r}
+
+bigrams_united <- bigrams_filtered %>%
+   unite(bigram, word1, word2, sep = " ")
+
+bigram_tf_idf <- bigrams_united %>%
+   count(episode, bigram) %>%
+   bind_tf_idf(bigram, episode, n) %>%
+   arrange(desc(tf_idf))
+
+```
+
+From these graphs it became obvious that one mistake I made is that I did not exclude such line which were just annotations to the subtitle, e.g. 'Officer 2' - indicating the person who was talking or 'Speaking foreign language' when in the film someone speaks other language than English. These are definitely not part of any conversation and should not be considered.
+Although we can see that for instance water supply is not mentioned a lot of times but is important in the first episode. Strange to see 'harvey dent' appearing in both second and third episode, I would have expected only unique bigrams which are not common for the episodes.
+
+```{r bigram plot, fig.width=8,fig.height=8, fig.align='center'}
+bigram_tf_idf %>%
+   arrange(desc(tf_idf)) %>%
+   group_by(episode) %>%
+   slice_max(tf_idf, n = 10) %>%
+   ungroup() %>%
+   mutate(bigram = reorder(bigram, tf_idf)) %>%
+   ggplot(aes(tf_idf, bigram, fill = episode)) +
+   geom_col(show.legend = FALSE) +
+   facet_wrap(~ episode, ncol = 2, scales = "free") +
+   labs(x = "tf-idf of bigram", y = NULL)
+
+```
+
+In summary I was dealing with small text(s), which contained not too much unique words after removing the most common stop words. Since I worked with subtitle text, the analysis could only reveal what the persons were saying in the movies, there was no description along. This becomes evident when looking at the most frequent word list which contains only names and places. Similar to the bigram word list. Sentiment-wise I found that the least negative film - The Dark Knight - got the highest IMDB scoring and it is known that it was the biggest hit among the three episodes. Based only on this fact I would say my hypothesis did not get confirmed, but I could realize another pattern.
+
